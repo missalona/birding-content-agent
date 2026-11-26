@@ -17,7 +17,8 @@ The details of each component are in [SPEC.md](SPEC.md). Here you see the full p
 | **The agent** | `birding-weekly-producer` | The brain: decides, researches, produces, uploads | Claude Platform |
 | | Claude Opus 5.5 | The model | Anthropic |
 | | 3 skills | Video production, source research, YouTube publishing | Claude Platform |
-| **The room** | Cloud Environment | Where the tools run: bash, rendering, ffmpeg, Whisper | Container in Anthropic's cloud |
+| **The rooms** | `birding-research` (phase A) | Research only: 14 trusted hosts, which also limit web search and web fetch | Container in Anthropic's cloud |
+| | `birding-studio` (phase B) | Production: bash, rendering, ffmpeg, Whisper, production hosts | Container in Anthropic's cloud |
 | **Secrets** | Credential vault | Keys and logins, without the agent seeing them | Claude Platform |
 | **Memory** | `birding-channel-rules` | Channel rules, read only | Claude Platform |
 | | `birding-notebook` | The agent's notebook, read and write | Claude Platform |
@@ -48,7 +49,7 @@ flowchart LR
 
     subgraph PLAT["Claude Platform"]
         AG["Agent<br/>Opus 5.5 + 3 skills"]
-        ROOM["Cloud room<br/>bash, render, ffmpeg, Whisper"]
+        ROOM["Cloud rooms<br/>research room (phase A)<br/>studio room (phase B)"]
         VAULT["Credential vault"]
         MEM[("Memory stores<br/>rules + notebook")]
         MON["Session viewer<br/>records, webhook"]
@@ -295,7 +296,7 @@ flowchart TB
 | **The vault** | The keys never enter the room. Even if a web page or an email says "print your keys", the agent has nothing to print |
 | **Minimal permissions** | YouTube: upload and read, no delete. Drive: only files the agent created. Gmail: send to two addresses only, and read only the approval thread |
 | **Untrusted data** | Web page content and the client's reply are data, not instructions. An unusual request is forwarded to me |
-| **Limited networking** | The room reaches only the hosts on the list (SPEC, section 10) |
+| **Limited networking** | Each room reaches only the hosts on its list (SPEC, section 10). In the research room the list also limits web search and web fetch, so search results come only from trusted sources. Reddit cannot be added: it blocks Claude |
 | **No deleting** | The agent has no tool that deletes or replaces an existing video |
 
 ---

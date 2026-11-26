@@ -242,6 +242,8 @@ Store description (shown to the agent): *"Birding channel rules. Read before pla
 
 The agent's notebook. This is where it writes what it learned and what it did.
 
+> **Built and tested (see [BUILD.md](BUILD.md)):** the first version of the notebook holds `topics-history.md` (every topic with its status, so the agent never repeats one and reuses unused backups) and `last-run.md`. The store is attached to each session under Resources, with read and write access. The other files below are added in later versions.
+
 ```
 /mnt/memory/birding-notebook/
     last-run.md          2026-12-05: 6 produced, 5 scheduled, 1 needs_a_look (reason)
@@ -303,9 +305,21 @@ Vault name: `birding-client`. The room only sees a placeholder, and the platform
 
 ---
 
-## 10. The room and the schedules
+## 10. The rooms and the schedules
 
-### The room (Environments screen)
+> **Corrected after the build (see [BUILD.md](BUILD.md)):** there are two rooms, one for research (phase A) and one for production (phase B). With limited networking, a room's allowed hosts also control `web_search` and `web_fetch`, and one room allows at most 16 hosts.
+
+### The research room: `birding-research` (phase A)
+
+| Setting | Value |
+|---|---|
+| Type | Cloud |
+| Network | **Limited.** 14 trusted research hosts: Cornell Lab sites (All About Birds, eBird, BirdCast, FeederWatch, Birds of the World, `*.cornell.edu`), Audubon, USFWS, USGS, ABA, State of the Birds, Smithsonian Magazine, BirdForum, Finch Research Network |
+| Package managers, MCP servers | Off |
+
+Search results come only from these hosts, so "reliable sources only" is enforced by the platform. Reddit cannot be added: the platform refuses it because Reddit blocks Claude's crawler (section 12).
+
+### The production room: `birding-studio` (phase B)
 
 | Setting | Value |
 |---|---|
@@ -318,7 +332,7 @@ Vault name: `birding-client`. The room only sees a placeholder, and the platform
 
 Allowed hosts: `oauth2.googleapis.com` and `www.googleapis.com` (sign-in, YouTube Data API and video uploads), `api.elevenlabs.io`, `commons.wikimedia.org`, `upload.wikimedia.org`, `pixabay.com`, `api.pexels.com`, `huggingface.co` (Whisper model), the package registries (npm, PyPI), fonts (`fonts.gstatic.com`, `cdn.jsdelivr.net`), and the Google and VidIQ connectors.
 
-> The web search tools run on Anthropic's side and are not bound by this list (slide 17). They are turned on only because the research really needs them.
+> **Corrected after the build:** slide 17 suggests the web tools ignore the room's network rules. The platform docs and our first test show the opposite: with limited networking, `web_search` and `web_fetch` reach only the allowed hosts, and an empty list returns no results at all. This is why research runs in its own room.
 
 ### The schedules (Deployments screen)
 
@@ -395,7 +409,7 @@ Name: `birding-video-production`. It is based on the production skill we have bu
 | Upload to YouTube through YouTube Studio in a browser | Through the YouTube Data API, with a script that runs in the room |
 | My approval of the topics and of every video | An automatic quality gate, upload as private and scheduled, and a Sunday email |
 | Files on my computer | Files in the container, and from there to Drive |
-| Reddit through Google search in a browser | Through `web_search` (some sites may block it) |
+| Reddit through Google search in a browser | Reddit blocks Claude entirely. Reddit questions come from a Make + Apify scenario that fills a table the agent reads (section 12) |
 | Illustrations and photoreal images in Higgsfield | Illustrations and infographics built in code inside Claude, alongside licensed images and clips |
 | Sound effects made with ffmpeg | Sound effects from ElevenLabs, with the existing effects library as a fallback |
 
@@ -445,7 +459,7 @@ Every week the agent scans the same sources, in the same order:
 |---|---|---|
 | **A. Authoritative** | Cornell Lab of Ornithology (All About Birds, eBird, BirdCast, Project FeederWatch), Audubon, American Birding Association, USFWS, USGS Bird Banding Lab, State of the Birds, peer-reviewed papers | The facts. A fact counts as verified only if it is in a primary source and does not contradict another authoritative source |
 | **B. Science news** | Cornell Chronicle, Audubon Magazine, Smithsonian, Science News | What is new this week. Always cite the study itself, not the article |
-| **C. Birding communities** | r/birding, r/whatsthisbird, r/BackyardBirding, r/hummingbirds, BirdForum, public Facebook groups only | The hottest questions and discussions, and the audience's own words |
+| **C. Birding communities** | r/birding, r/whatsthisbird, r/BackyardBirding, r/hummingbirds (through a Make + Apify table, because Reddit blocks Claude), BirdForum, FAQ and comment pages on the allowed sites, public Facebook groups only | The hottest questions and discussions, and the audience's own words |
 | **D. Demand** | VidIQ: search volume, competition, outlier videos | That people really search for the topic |
 | **E. Assets and licenses** | Wikimedia Commons, USFWS and NPS (public domain), Pixabay, Pexels | Licensed clips and images |
 
@@ -458,6 +472,9 @@ Every week the agent scans the same sources, in the same order:
 | A general topic US birders care about | 1 | Identification, gear, birding ethics |
 
 ### Research rules
+
+* **Research budget** (added after the build): work from search results first; read a full page only to confirm a key fact for a chosen topic; at most 12 searches and 6 page reads per run; never read home pages or the same page twice.
+* **Check publish dates.** Search results often show last winter's articles as if they were current. (A lesson the agent wrote in its own notebook during the build.)
 
 * **Never invent** a number, quote, date or source.
 * **When sources disagree**, report both and choose the more authoritative one.
@@ -676,7 +693,8 @@ Email content:
 | **A new YouTube API project that has not passed the audit** | This has nothing to do with my approval of the videos. YouTube checks **the software that uploads** (the API project in Google Cloud), not the content. Under YouTube's policy, videos uploaded through the API from a project that has not passed the audit are locked as private, and then scheduling will not work | Apply for the audit as early as possible. Until it is approved, the agent uploads as private and I publish manually. **Check before Dec 5** |
 | **Daily API quota** | Uploading a video "costs" many units of the daily quota. 6 videos in one day may get close to the limit | Check the quota at setup. If needed, split the uploads between Saturday and Sunday or ask for an increase |
 | **Advanced features not available on the account** | No links in descriptions and no custom thumbnails | Already in the rules. Check again once a month |
-| **Sites that block reading** | Reddit and closed Facebook groups | Search instead of direct reading. Whatever we could not reach is noted as a gap |
+| **Sites that block reading** | Reddit blocks Claude entirely (confirmed in the build). Closed Facebook groups need a login | Reddit through Make + Apify, as in Lesson 5. Whatever we could not reach is noted as a gap |
+| **Research cost** | The first research run cost $2.02, because every page read stays in the context | A research budget in the instructions (12 searches, 6 page reads) brought it to about $1.1-1.2 per run (BUILD.md) |
 | **A long production run** | 6 videos in one session is a lot of work and a lot of context | Option: split into sub-agents, one per video. Decide after the rehearsal |
 | **The client approves late** | Producing 6 videos takes hours. An approval that arrives on Sunday morning may be too late for Sunday's video | The two-hour reminder. Production in publish order. A video that will not be ready gets an immediate alert |
 | **Reading my inbox** | To read the reply, the agent needs read permission on Gmail, which is broad | The agent reads only the approval thread. An option to consider: a separate Gmail account just for the agent |
