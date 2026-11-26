@@ -17,7 +17,7 @@
 
 ## 1. Summary in one sentence
 
-Every Saturday morning the agent checks what is already on the channel, researches new topics from reliable sources and birding communities, produces 5 Shorts and 1 long video, uploads and schedules them on YouTube for Sunday to Thursday, and updates a content plan in Google Drive. Every Sunday morning the owner gets an email with the week's videos.
+Every Saturday morning the agent checks what is already on the channel, researches new topics from reliable sources and birding communities, produces 5 Shorts and 1 long video, uploads and schedules them on YouTube for Sunday to Thursday, and updates a content plan in Google Drive. Every Sunday morning the owner gets an email with the week's videos. Everything runs in Anthropic's cloud, so the agent works even when my computer is off.
 
 ## 2. The client's problem
 
@@ -155,7 +155,7 @@ system:      the full instructions in Appendix A
 tools:       bash, read, write, edit, glob, grep     on
              web_search, web_fetch                  on   (research needs the open web)
 mcp:         google-drive · gmail · vidiq
-custom:      youtube_list_channel_videos · youtube_upload_scheduled · youtube_get_video_status
+youtube:     YouTube Data API from bash (scripts in the youtube-publishing skill), login in the vault
 skills:      birding-video-production · video-research-sources · youtube-publishing
 version:     1   (every session is pinned to a version)
 ```
@@ -166,9 +166,9 @@ version:     1   (every session is pinned to a version)
 |---|---|---|---|
 | `bash`, `read`, `write`, `edit`, `glob`, `grep` | Work inside the container: rendering, ffmpeg, quality gate scripts | Writes only inside the room | `auto` |
 | `web_search`, `web_fetch` | Research: sources, communities, season | Reads | `auto` |
-| `youtube_list_channel_videos` (custom tool) | List of the channel's videos, to avoid duplicates | Reads | `auto` |
-| `youtube_upload_scheduled` (custom tool) | Upload a video as private with a publish time | **Writes to the client's system** | `auto` (my decision, see below) |
-| `youtube_get_video_status` (custom tool) | A video's status: scheduled, public, private, rejected | Reads | `auto` |
+| `youtube_list_channel_videos` (script in the room) | List of the channel's videos, to avoid duplicates | Reads | `auto` |
+| `youtube_upload_scheduled` (script in the room) | Upload a video as private with a publish time | **Writes to the client's system** | `auto` (my decision, see below) |
+| `youtube_get_video_status` (script in the room) | A video's status: scheduled, public, private, rejected | Reads | `auto` |
 | Google Drive | Content plan and video folder | Reads and writes | `auto` |
 | Gmail | Weekly email and alert emails | **Sends messages** | `auto`, and only to one address |
 | VidIQ | Keyword demand and competition, outlier videos | Reads | `auto` |
@@ -183,7 +183,13 @@ version:     1   (every session is pinned to a version)
 3. The Sunday email arrives before the first video goes live.
 4. The agent has **no** tool to delete, replace or edit existing videos. It only adds.
 
-**The custom tools** run on my side. The model asks, my server calls the YouTube Data API, and returns the result. The key never enters the room.
+**The YouTube work runs inside the room, in the cloud.** The three YouTube scripts (video list, upload, status check) live in the `youtube-publishing` skill, and the agent runs them with `bash`, exactly like the ElevenLabs API. The YouTube login is stored in the vault (section 9).
+
+**Why not a custom tool:** a custom tool works like this: the agent asks, and **my server** runs the call and answers (slide 19). If that server is my computer and it is off, nobody answers, and the session gets stuck exactly at the upload. When everything runs in the room, the agent does not depend on my computer.
+
+**The price of this choice:** to talk to YouTube, the script gets a temporary "entry ticket" from Google (an access token) that is valid for about an hour, and that ticket does sit in the room. What limits the risk: its permissions are upload and read only, with no delete, and it expires on its own. The permanent key itself (the refresh token) stays in the vault.
+
+**An option to check at setup:** if there is a YouTube MCP connector that runs in the cloud and supports uploads, it can replace the scripts. Then even the temporary ticket never enters the room.
 
 ---
 
@@ -267,7 +273,7 @@ Vault name: `birding-client`. The room only sees a placeholder, and the platform
 |---|---|---|
 | Google (Drive) | OAuth login for the connector | `drive.file`: only files the agent itself created |
 | Google (Gmail) | OAuth login for the connector | `gmail.send` only, no reading of the inbox |
-| YouTube | Kept on the custom tools' server, not in the room's vault | `youtube.upload` and `youtube.readonly`. **No** delete permission |
+| YouTube | Environment variables: `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN` | `youtube.upload` and `youtube.readonly`. **No** delete permission. Created once; I sign in myself |
 | ElevenLabs | Environment variable `ELEVENLABS_API_KEY` | A key dedicated to this agent, from the client's account: narration (the Aris voice), sound effects and music only, with a credit cap (section 11) |
 | VidIQ | Connector login | Read only |
 | Pixabay, Pexels | Environment variable | Search for licensed clips and images |
@@ -285,7 +291,9 @@ Vault name: `birding-client`. The room only sees a placeholder, and the platform
 | Packages | Node.js, Python, ffmpeg, Chromium (for rendering), faster-whisper (to check the narration) |
 | Network | **Limited.** Only the hosts the work needs |
 
-Allowed hosts: `api.elevenlabs.io`, `commons.wikimedia.org`, `upload.wikimedia.org`, `pixabay.com`, `api.pexels.com`, `huggingface.co` (Whisper model), the package registries (npm, PyPI), fonts (`fonts.gstatic.com`, `cdn.jsdelivr.net`), and the Google and VidIQ connectors.
+**Everything runs in the cloud, even when my computer is off.** The room can be Cloud (Anthropic's) or Self-hosted (on a machine of mine). We choose Cloud, and everything the agent needs is reachable from there: the skills and their files are uploaded to the platform, the keys are in the vault, and the files and emails are in Google. Nothing stays only in a folder on my computer.
+
+Allowed hosts: `oauth2.googleapis.com` and `www.googleapis.com` (sign-in, YouTube Data API and video uploads), `api.elevenlabs.io`, `commons.wikimedia.org`, `upload.wikimedia.org`, `pixabay.com`, `api.pexels.com`, `huggingface.co` (Whisper model), the package registries (npm, PyPI), fonts (`fonts.gstatic.com`, `cdn.jsdelivr.net`), and the Google and VidIQ connectors.
 
 > The web search tools run on Anthropic's side and are not bound by this list (slide 17). They are turned on only because the research really needs them.
 
@@ -349,7 +357,7 @@ Name: `birding-video-production`. It is based on the production skill we have bu
 | Until now | In the agent |
 |---|---|
 | Narration and music through the ElevenLabs website in a browser | Through the ElevenLabs API, with a key in the vault |
-| Upload to YouTube through YouTube Studio in a browser | Through the YouTube Data API, with a custom tool |
+| Upload to YouTube through YouTube Studio in a browser | Through the YouTube Data API, with a script that runs in the room |
 | My approval of the topics and of every video | An automatic quality gate, upload as private and scheduled, and a Sunday email |
 | Files on my computer | Files in the container, and from there to Drive |
 | Reddit through Google search in a browser | Through `web_search` (some sites may block it) |
@@ -388,7 +396,9 @@ Until now we produced the narration on the ElevenLabs website, in a browser. The
 ### Other skills
 
 * `video-research-sources`: the existing skill for scanning sources in a fixed order.
-* `youtube-publishing`: a new skill for titles, descriptions, tags and publish times (section 13).
+* `youtube-publishing`: a new skill for titles, descriptions, tags and publish times (section 13), plus the scripts that upload videos and check their status through the YouTube Data API.
+
+**The skills are uploaded to the platform with all their files:** scripts, fonts, brand files, fallback sound effects and code samples. The agent cannot see any file that stays only on my computer.
 
 ---
 
@@ -575,6 +585,7 @@ Email content:
 | **Advanced features not available on the account** | No links in descriptions and no custom thumbnails | Already in the rules. Check again once a month |
 | **Sites that block reading** | Reddit and closed Facebook groups | Search instead of direct reading. Whatever we could not reach is noted as a gap |
 | **A long production run** | 6 videos in one session is a lot of work and a lot of context | Option: split into sub-agents, one per video. Decide after the rehearsal |
+| **Heavy rendering in the container** | Rendering 6 videos at 60 frames per second is heavy work, and we have not yet checked how much time and resources the platform's container has | Measure in the rehearsal how long one video takes. If needed, lower the frame rate for drafts or split the production |
 | **The platform is in beta** | Memory stores and other features may change | Check the screens at setup |
 | **No human approval before upload** | A mistake could reach the channel | Upload as private and scheduled, the quality gate, and the Sunday email |
 
@@ -586,8 +597,8 @@ Following the lesson's build order (slide 16): **Agent → Environment → Vault
 
 | # | Step | By |
 |---|---|---|
-| 1 | Build the custom tools for the YouTube Data API and apply for the audit | Nov 29 |
-| 2 | Build the `birding-video-production` skill from the existing skill, with the changes in section 11 | Dec 1 |
+| 1 | Open a YouTube Data API project, create an OAuth login with upload and read permissions only, and apply for the audit | Nov 29 |
+| 2 | Build the `birding-video-production` skill from the existing skill, with the changes in section 11, and the `youtube-publishing` skill with the upload scripts. Upload both to the platform with all their files | Dec 1 |
 | 3 | Create the two memory stores and fill the rules store | Dec 1 |
 | 4 | Create the agent (Agents), version 1 | Dec 2 |
 | 5 | Create the room (Environments) with limited networking | Dec 2 |
