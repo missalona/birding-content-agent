@@ -11,3 +11,4 @@ The client and the channel are examples for the exercise. Identifying details we
 | File | What is in it |
 |---|---|
 | [SPEC.md](SPEC.md) | The detailed plan: how the agent works, which tools it uses, and how its memory is managed |
+| [Architecture.md](Architecture.md) | The flow diagrams: what starts the agent, where information comes from, where the results go, and every component of the system |
